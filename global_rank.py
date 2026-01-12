@@ -21,7 +21,7 @@ st.caption("Exploratory Data Analysis with Automated Insights")
 # -------------------------------
 @st.cache_data
 def load_data():
-    return pd.read_csv("cwur_2025_rankings_cleaned.csv")
+    return pd.read_csv("data/cwur_2025_rankings_cleaned.csv")
 
 df = load_data()
 
@@ -49,18 +49,19 @@ max_rank = st.sidebar.slider(
 # -------------------------------
 # APPLY FILTERS
 # -------------------------------
-filtered_df = df.copy()
+@st.cache_data
+def filter_data(df, country, bucket, gap, max_rank):
+    filtered = df.copy()
+    if country != "All":
+        filtered = filtered[filtered['Location'] == country]
+    if bucket != "All":
+        filtered = filtered[filtered['World Rank Bucket'] == bucket]
+    if gap != "All":
+        filtered = filtered[filtered['Rank Gap Flag'] == gap]
+    filtered = filtered[filtered['World Rank'] <= max_rank]
+    return filtered
 
-if selected_country != "All":
-    filtered_df = filtered_df[filtered_df['Location'] == selected_country]
-
-if selected_bucket != "All":
-    filtered_df = filtered_df[filtered_df['World Rank Bucket'] == selected_bucket]
-
-if selected_gap != "All":
-    filtered_df = filtered_df[filtered_df['Rank Gap Flag'] == selected_gap]
-
-filtered_df = filtered_df[filtered_df['World Rank'] <= max_rank]
+filtered_df = filter_data(df, selected_country, selected_bucket, selected_gap, max_rank)
 
 # -------------------------------
 # KPI CALCULATIONS
@@ -91,9 +92,6 @@ short_names = {
     "Obafemi Awolowo University": "OAU",
     "Başkent University": "Başkent Uni",
     "University of Ibadan": "UI"
-    
-    
-    # add more mappings as needed
 }
 
 def get_short_name(name):
@@ -103,7 +101,6 @@ def get_short_name(name):
 # KPI DISPLAY
 # -------------------------------
 c1, c2, c3, c4, c5 = st.columns(5)
-
 c1.metric("Top 100 Institutions", top_100_count)
 c2.metric("Top 10% Universities", top_10_percent_count)
 c3.metric("Best Ranked Institution", get_short_name(best_inst))
@@ -113,62 +110,25 @@ c5.metric("Full Dimension Coverage (%)", f"{full_dim_pct}%")
 st.divider()
 
 # -------------------------------
-# CHART 1: WORLD RANK DISTRIBUTION (BUCKETED BAR)
+# CHART 1: WORLD RANK DISTRIBUTION
 # -------------------------------
-
-rank_dist = (
-    filtered_df["World Rank Bucket"]
-    .value_counts()
-    .sort_index()
-    .reset_index()
-)
-
+rank_dist = filtered_df["World Rank Bucket"].value_counts().sort_index().reset_index()
 rank_dist.columns = ["World Rank Bucket", "Count"]
 
-# ===============================
-# Lollipop chart
-# ===============================
-fig = px.scatter(
-    rank_dist,
-    x="World Rank Bucket",
-    y="Count",
-    size="Count",
-    title="Distribution of Universities by World Rank Bucket",
-)
-
-# Add stems (vertical lines)
+fig = px.scatter(rank_dist, x="World Rank Bucket", y="Count", size="Count",
+                 title="Distribution of Universities by World Rank Bucket")
 for _, row in rank_dist.iterrows():
-    fig.add_shape(
-        type="line",
-        x0=row["World Rank Bucket"],
-        y0=0,
-        x1=row["World Rank Bucket"],
-        y1=row["Count"],
-        line=dict(width=2)
-    )
-
-fig.update_traces(
-    marker=dict(opacity=0.85),
-    hovertemplate="<b>%{x}</b><br>Universities: %{y}<extra></extra>"
-)
-
-fig.update_layout(
-    showlegend=False,
-    xaxis_title="World Rank Bucket",
-    yaxis_title="Number of Universities",
-)
-
+    fig.add_shape(type="line", x0=row["World Rank Bucket"], y0=0, x1=row["World Rank Bucket"], y1=row["Count"],
+                  line=dict(width=2))
+fig.update_traces(marker=dict(opacity=0.85),
+                  hovertemplate="<b>%{x}</b><br>Universities: %{y}<extra></extra>")
+fig.update_layout(showlegend=False, xaxis_title="World Rank Bucket", yaxis_title="Number of Universities")
 st.plotly_chart(fig, use_container_width=True)
 
-# ===============================
-# insights
-# ===============================
 top_bucket = rank_dist.loc[rank_dist["Count"].idxmax(), "World Rank Bucket"]
 top_count = rank_dist["Count"].max()
-
 lowest_bucket = rank_dist.loc[rank_dist["Count"].idxmin(), "World Rank Bucket"]
 lowest_count = rank_dist["Count"].min()
-
 total_universities = rank_dist["Count"].sum()
 top_pct = round((top_count / total_universities) * 100, 1)
 
@@ -176,11 +136,8 @@ st.info(
     f"🔍 **Insight**\n\n"
     f" The **{top_bucket}** bucket has the highest concentration with **{top_count} universities**, "
     f"representing **{top_pct}%** of all ranked institutions.\n"
-    f" This suggests intense competition and clustering in mid-to-lower global ranking tiers.\n"
-    f" The **{lowest_bucket}** bucket is the most exclusive, with only **{lowest_count} universities**, "
-    f"highlighting the difficulty of reaching top global ranks."
+    f" The **{lowest_bucket}** bucket is the most exclusive, with only **{lowest_count} universities**."
 )
-
 
 # -------------------------------
 # CHART 2: TOP COUNTRIES BY UNIVERSITY COUNT
@@ -189,24 +146,21 @@ country_counts = filtered_df['Location'].value_counts().head(10)
 fig = px.bar(country_counts, title="Top 10 Countries by Number of Universities")
 st.plotly_chart(fig, use_container_width=True)
 
-st.info(f"🌍 Insight: **{country_counts.index[0]}** hosts the most universities, indicating a strong higher-education ecosystem.")
+st.info(f"🌍 Insight: **{country_counts.index[0]}** hosts the most universities.")
 
 # -------------------------------
 # CHART 3: COUNTRIES DOMINATING TOP 100
 # -------------------------------
-top100_country = (
-    filtered_df[filtered_df['World Rank'] <= 100]
-    .groupby('Location')['Institution']
-    .count()
-    .sort_values(ascending=False)
-    .head(10)
-)
+@st.cache_data
+def top100_countries(df):
+    return (df[df['World Rank'] <= 100].groupby('Location')['Institution']
+            .count().sort_values(ascending=False).head(10))
+
+top100_country = top100_countries(filtered_df)
 fig = px.bar(top100_country, title="Top 10 Countries by Top 100 Universities")
 st.plotly_chart(fig, use_container_width=True)
-
 if not top100_country.empty:
-    st.info(f"🏆 Insight: **{top100_country.index[0]}** dominates the global elite with **{top100_country.iloc[0]}** top 100 universities.")
-
+    st.info(f"🏆 Insight: **{top100_country.index[0]}** dominates with **{top100_country.iloc[0]}** top 100 universities.")
 
 # -------------------------------
 # CHART 4: COMPOSITE SCORE VS WORLD RANK
@@ -226,20 +180,17 @@ st.info(f"📉 Insight: Correlation of **{corr:.2f}** confirms that higher compo
 # -------------------------------
 # CHART 5A: RANKING DIMENSION STRENGTH
 # -------------------------------
-
 dim_cols = ['Education Rank Status', 'Research Rank Status', 'Employability Rank Status']
-dim_strength = filtered_df[dim_cols].apply(pd.Series.value_counts).fillna(0)
 
-# Reset index and melt for Plotly
-dim_strength = dim_strength.reset_index().rename(columns={'index': 'Status'})
-dim_long = dim_strength.melt(id_vars='Status', var_name='Dimension', value_name='Count')
+@st.cache_data
+def compute_dim_strength(df, dim_cols):
+    dim_strength = df[dim_cols].apply(pd.Series.value_counts).fillna(0)
+    dim_strength = dim_strength.reset_index().rename(columns={'index': 'Status'})
+    dim_long = dim_strength.melt(id_vars='Status', var_name='Dimension', value_name='Count')
+    variation = dim_strength[dim_cols].std()
+    return dim_strength, dim_long, variation
 
-# Define custom colors
-custom_colors = {
-    'Education Rank Status': '#636EFA',  # blue
-    'Research Rank Status': '#EF553B',   # red
-    'Employability Rank Status': '#00CC96'  # green
-}
+dim_strength, dim_long, variation = compute_dim_strength(filtered_df, dim_cols)
 
 fig = px.bar(
     dim_long,
@@ -248,68 +199,62 @@ fig = px.bar(
     color='Dimension',
     barmode='stack',
     title="Strength Distribution Across Ranking Dimensions",
-    color_discrete_map=custom_colors
+    color_discrete_map={
+        'Education Rank Status': '#636EFA',  # blue
+        'Research Rank Status': '#EF553B',   # red
+        'Employability Rank Status': '#00CC96'  # green
+    }
 )
 
 st.plotly_chart(fig, use_container_width=True)
 
-# --------- Auto Insight ---------
-# Compute variation (standard deviation across statuses for each dimension)
-variation = dim_strength[dim_cols].std()
 most_consistent = variation.idxmin().replace(' Rank Status','')
 most_variable = variation.idxmax().replace(' Rank Status','')
 
 st.info(f"🎓Insight: {most_consistent} is the most consistent dimension across universities, while {most_variable} shows the most variation in performance.")
 
-
-
 # -------------------------------
 # CHART 5B: CORRELATION HEATMAP OF RANKINGS AND SCORES
 # -------------------------------
-
 numeric_cols = [
     'World Rank', 'Education Rank', 'Research Rank', 
     'Faculty Rank', 'Employability Rank', 'Composite Rank Score', 'Score'
 ]
 
-# Compute correlation matrix using filtered_df
-corr_matrix = filtered_df[numeric_cols].corr()
+@st.cache_data
+def compute_corr_matrix(df, numeric_cols):
+    return df[numeric_cols].corr()
 
-# Create interactive heatmap
+corr_matrix = compute_corr_matrix(filtered_df, numeric_cols)
+
 fig = px.imshow(
     corr_matrix,
-    text_auto=True,                  # show correlation values on cells
-    color_continuous_scale='RdBu_r', # red-blue diverging color
+    text_auto=True,
+    color_continuous_scale='RdBu_r',
     origin='upper',
     aspect="auto"
 )
 fig.update_layout(title='Correlation Heatmap of Rankings and Scores')
-
-# Render in Streamlit
 st.plotly_chart(fig, use_container_width=True)
 
 # -------------------------------
 # INSIGHT
 # -------------------------------
-# Find strongest correlation
 strong_corrs = [(c1, c2, v) 
                 for i, c1 in enumerate(corr_matrix.columns) 
                 for j, c2 in enumerate(corr_matrix.columns) 
                 if j > i and abs((v := corr_matrix.iloc[i, j])) >= 0.7]
 
 if strong_corrs:
-    # Pick the highest absolute correlation
     c1, c2, val = max(strong_corrs, key=lambda x: abs(x[2]))
-    
     if val > 0:
-        insight = f"🔬 Insight: **{c1}** and **{c2}** move hand-in-hand, showing that strong {c2.lower()} is a key factor whenever {c1.lower()} is high."
+        insight = f"🔬 Insight: **{c1}** and **{c2}** move hand-in-hand, showing strong {c2.lower()} when {c1.lower()} is high."
     else:
-        insight = f"⚠️ Insight: **{c1}** and **{c2}** move in opposite directions, suggesting that high {c1.lower()} may coincide with lower {c2.lower()}."
+        insight = f"⚠️ Insight: **{c1}** and **{c2}** move in opposite directions, suggesting high {c1.lower()} may coincide with lower {c2.lower()}."
 else:
     insight = "No strong correlations (>|0.7|) found among ranking dimensions."
 
 st.info(insight)
-
 
 # -------------------------------
 # CHART 6: TOP 100 VS OTHERS (RESEARCH)
