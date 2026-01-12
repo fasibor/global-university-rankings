@@ -1,0 +1,28 @@
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# Virtual environment folders
+venv/
+env/
+.venv/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE specific files (VSCode, PyCharm)
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Ignore any large files/folders you don't need to push
+*.sqlite
+*.db
