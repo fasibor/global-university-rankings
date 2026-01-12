@@ -21,7 +21,7 @@ st.caption("Exploratory Data Analysis with Automated Insights")
 # -------------------------------
 @st.cache_data
 def load_data():
-    return pd.read_csv(r"C:\Users\FELIX\Documents\Capstone Project\cwur_2025_rankings_cleaned.csv")
+    return pd.read_csv("cwur_2025_rankings_cleaned.csv")
 
 df = load_data()
 
