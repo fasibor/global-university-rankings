@@ -1,12 +1,6 @@
-# Build tools
-setuptools>=68.0
-wheel
-
-# Web & visualization
 streamlit==1.28.0
 plotly==5.18.0
-
-# Data & analytics (prebuilt wheels for Python 3.10)
 pandas==2.0.3
 numpy==1.25.0
 scikit-learn==1.2.2
+statsmodels==0.14.0
