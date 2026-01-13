@@ -4,5 +4,5 @@ primaryColor = "#4C6EF5"                # Academic blue
 backgroundColor = "#0E1117"             # Near-black (Streamlit native dark)
 secondaryBackgroundColor = "#161B22"    # Card & sidebar background
 textColor = "#E6EDF3"                   # Soft white (readable)
-font = "serif"
+font = "sans serif"
 

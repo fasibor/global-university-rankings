@@ -112,55 +112,181 @@ st.divider()
 # -------------------------------
 # CHART 1: WORLD RANK DISTRIBUTION
 # -------------------------------
-rank_dist = filtered_df["World Rank Bucket"].value_counts().sort_index().reset_index()
+import numpy as np
+from plotly.colors import sample_colorscale
+
+rank_dist = (
+    filtered_df["World Rank Bucket"]
+    .value_counts()
+    .sort_index()
+    .reset_index()
+)
 rank_dist.columns = ["World Rank Bucket", "Count"]
 
-fig = px.scatter(rank_dist, x="World Rank Bucket", y="Count", size="Count",
-                 title="Distribution of Universities by World Rank Bucket")
+# --- Normalize count for color intensity ---
+rank_dist["norm_count"] = (
+    rank_dist["Count"] - rank_dist["Count"].min()
+) / (
+    rank_dist["Count"].max() - rank_dist["Count"].min()
+)
+
+# --- Blue intensity scale (dark → bright) ---
+blue_scale = [
+    [0.0, "#2B3A8F"],
+    [0.5, "#4C6EF5"],
+    [1.0, "#8EA2FF"]
+]
+
+colors = sample_colorscale(blue_scale, rank_dist["norm_count"])
+
+fig = px.scatter(
+    rank_dist,
+    x="World Rank Bucket",
+    y="Count",
+    size=rank_dist["Count"] * 0.6,
+    color=rank_dist["norm_count"],
+    color_continuous_scale=blue_scale,
+    title="Distribution of Universities by World Rank Bucket"
+)
+
+# --- Lollipop sticks ---
 for _, row in rank_dist.iterrows():
-    fig.add_shape(type="line", x0=row["World Rank Bucket"], y0=0, x1=row["World Rank Bucket"], y1=row["Count"],
-                  line=dict(width=2))
-fig.update_traces(marker=dict(opacity=0.85),
-                  hovertemplate="<b>%{x}</b><br>Universities: %{y}<extra></extra>")
-fig.update_layout(showlegend=False, xaxis_title="World Rank Bucket", yaxis_title="Number of Universities")
+    fig.add_shape(
+        type="line",
+        x0=row["World Rank Bucket"],
+        y0=0,
+        x1=row["World Rank Bucket"],
+        y1=row["Count"],
+        line=dict(
+            color="#9AA4B2",
+            width=4
+        ),
+        layer="below"
+    )
+
+# --- Pops with glow effect ---
+fig.update_traces(
+    marker=dict(
+        color=colors,
+        opacity=0.95,
+        line=dict(
+            width=2.5,
+            color="rgba(140,160,255,0.9)"  # glow ring
+        )
+    ),
+    hovertemplate="<b>%{x}</b><br>Universities: %{y}<extra></extra>"
+)
+
+# --- Layout polish ---
+fig.update_layout(
+    showlegend=False,
+    plot_bgcolor="#0E1117",
+    paper_bgcolor="#0E1117",
+    xaxis_title="World Rank Bucket",
+    yaxis_title="Number of Universities",
+    xaxis=dict(showgrid=False),
+    yaxis=dict(
+        showgrid=True,
+        gridcolor="rgba(255,255,255,0.08)"
+    ),
+    title_font=dict(size=18),
+    coloraxis_showscale=False  # hide legend
+)
+
 st.plotly_chart(fig, use_container_width=True)
 
-top_bucket = rank_dist.loc[rank_dist["Count"].idxmax(), "World Rank Bucket"]
-top_count = rank_dist["Count"].max()
-lowest_bucket = rank_dist.loc[rank_dist["Count"].idxmin(), "World Rank Bucket"]
-lowest_count = rank_dist["Count"].min()
-total_universities = rank_dist["Count"].sum()
-top_pct = round((top_count / total_universities) * 100, 1)
+# --- Auto Insight Logic ---
+top_row = rank_dist.loc[rank_dist["Count"].idxmax()]
+bottom_row = rank_dist.loc[rank_dist["Count"].idxmin()]
 
+total = rank_dist["Count"].sum()
+top_pct = round((top_row["Count"] / total) * 100, 1)
+
+spread = rank_dist["Count"].max() - rank_dist["Count"].min()
+skew_flag = "highly concentrated" if top_pct > 30 else "fairly distributed"
+
+# --- Auto Insight Text ---
 st.info(
-    f"🔍 **Insight**\n\n"
-    f" The **{top_bucket}** bucket has the highest concentration with **{top_count} universities**, "
-    f"representing **{top_pct}%** of all ranked institutions.\n"
-    f" The **{lowest_bucket}** bucket is the most exclusive, with only **{lowest_count} universities**."
+    f"💡 Insight: The **{top_row['World Rank Bucket']}** bucket stands out with **{top_row['Count']} universities**, "
+    f"accounting for **{top_pct}%** of all ranked institutions. The distribution is **{skew_flag}**, "
+    f"with a spread of **{spread} universities** between the most and least populated buckets."
 )
+
 
 # -------------------------------
 # CHART 2: TOP COUNTRIES BY UNIVERSITY COUNT
 # -------------------------------
 country_counts = filtered_df['Location'].value_counts().head(10)
-fig = px.bar(country_counts, title="Top 10 Countries by Number of Universities")
+
+# Color mapping
+colors = ["#4C6EF5"] + ["rgba(76, 110, 245, 0.45)"] * (len(country_counts) - 1)
+
+fig = px.bar(
+    country_counts,
+    title="Top 10 Countries by Number of Universities"
+)
+
+fig.update_traces(
+    marker_color=colors,
+    hovertemplate="<b>%{x}</b><br>Universities: %{y}<extra></extra>"
+)
+
+fig.update_layout(
+    showlegend=False,
+    plot_bgcolor="#0E1117",
+    paper_bgcolor="#0E1117",
+    xaxis_title="Country",
+    yaxis_title="Number of Universities"
+)
+
 st.plotly_chart(fig, use_container_width=True)
 
 st.info(f"🌍 Insight: **{country_counts.index[0]}** hosts the most universities.")
+
 
 # -------------------------------
 # CHART 3: COUNTRIES DOMINATING TOP 100
 # -------------------------------
 @st.cache_data
 def top100_countries(df):
-    return (df[df['World Rank'] <= 100].groupby('Location')['Institution']
-            .count().sort_values(ascending=False).head(10))
+    return (
+        df[df['World Rank'] <= 100]
+        .groupby('Location')['Institution']
+        .count()
+        .sort_values(ascending=False)
+        .head(10)
+    )
 
 top100_country = top100_countries(filtered_df)
-fig = px.bar(top100_country, title="Top 10 Countries by Top 100 Universities")
+
+colors = ["#4C6EF5"] + ["rgba(76, 110, 245, 0.45)"] * (len(top100_country) - 1)
+
+fig = px.bar(
+    top100_country,
+    title="Top 10 Countries by Top 100 Universities"
+)
+
+fig.update_traces(
+    marker_color=colors,
+    hovertemplate="<b>%{x}</b><br>Top 100 Universities: %{y}<extra></extra>"
+)
+
+fig.update_layout(
+    showlegend=False,
+    plot_bgcolor="#0E1117",
+    paper_bgcolor="#0E1117",
+    xaxis_title="Country",
+    yaxis_title="Number of Top 100 Universities"
+)
+
 st.plotly_chart(fig, use_container_width=True)
+
 if not top100_country.empty:
-    st.info(f"🏆 Insight: **{top100_country.index[0]}** dominates with **{top100_country.iloc[0]}** top 100 universities.")
+    st.info(
+        f"🏆 Insight: **{top100_country.index[0]}** dominates with "
+        f"**{top100_country.iloc[0]}** top 100 universities."
+    )
+
 
 # -------------------------------
 # CHART 4: COMPOSITE SCORE VS WORLD RANK
@@ -172,7 +298,45 @@ fig = px.scatter(
     trendline="ols",
     title="Composite Rank Score vs World Rank"
 )
+
+# --- Style points + trendline ---
+fig.update_traces(
+    marker=dict(
+        color="#4C6EF5",
+        size=9,
+        opacity=0.75,
+        line=dict(width=0)
+    ),
+    selector=dict(mode="markers")
+)
+
+# Trendline styling
+fig.update_traces(
+    line=dict(
+        color="#4C6EF5",
+        width=3
+    ),
+    selector=dict(mode="lines")
+)
+
+# --- Layout polish for dark theme ---
+fig.update_layout(
+    showlegend=False,
+    plot_bgcolor="#0E1117",
+    paper_bgcolor="#0E1117",
+    xaxis_title="Composite Rank Score",
+    yaxis_title="World Rank",
+    title_font=dict(size=18),
+    xaxis=dict(showgrid=False),
+    yaxis=dict(
+        autorange="reversed",  # lower rank = better
+        showgrid=True,
+        gridcolor="rgba(255,255,255,0.08)"
+    )
+)
+
 st.plotly_chart(fig, use_container_width=True)
+
 
 corr = filtered_df['Composite Rank Score'].corr(filtered_df['World Rank'])
 st.info(f"📉 Insight: Correlation of **{corr:.2f}** confirms that higher composite scores align with better world rankings.")
@@ -377,11 +541,54 @@ st.info(
 # -------------------------------
 # CHART 8: COVERAGE VS PERFORMANCE
 # -------------------------------
-fig = px.scatter(filtered_df, x="Ranking Dimensions Count", y="World Rank", trendline="ols",
-                 title="Ranking Dimension Coverage vs World Rank")
+fig = px.scatter(
+    filtered_df,
+    x="Ranking Dimensions Count",
+    y="World Rank",
+    trendline="ols",
+    title="Ranking Dimension Coverage vs World Rank"
+)
+
+# --- Style markers ---
+fig.update_traces(
+    marker=dict(
+        color="#4C6EF5",
+        size=9,
+        opacity=0.75
+    ),
+    selector=dict(mode="markers")
+)
+
+# --- Style trendline ---
+fig.update_traces(
+    line=dict(
+        color="#4C6EF5",
+        width=3
+    ),
+    selector=dict(mode="lines")
+)
+
+# --- Layout polish (dark theme) ---
+fig.update_layout(
+    showlegend=False,
+    plot_bgcolor="#0E1117",
+    paper_bgcolor="#0E1117",
+    xaxis_title="Ranking Dimensions Count",
+    yaxis_title="World Rank",
+    title_font=dict(size=18),
+    xaxis=dict(showgrid=False),
+    yaxis=dict(
+        autorange="reversed",  # better rank = higher
+        showgrid=True,
+        gridcolor="rgba(255,255,255,0.08)"
+    )
+)
+
 st.plotly_chart(fig, use_container_width=True)
 
-st.info("📊 Insight: More ranking dimensions evaluated generally correlate with better global rank.")
+
+st.info("📊 Insight: Institutions assessed across more ranking dimensions tend to achieve stronger global positions, "
+    "suggesting broader performance visibility improves world ranking outcomes.")
 
 # -------------------------------
 # CHART 9: AVERAGE DIMENSION RANKS (TOP 100 VS OTHERS)
@@ -459,10 +666,45 @@ st.caption("ℹ️ Note: Ranking metrics are inverse — lower rank values indic
 # -------------------------------
 # CHART 10: NATIONAL RANK VS WORLD RANK
 # -------------------------------
-fig = px.scatter(filtered_df, x="National Rank", y="World Rank", title="National Rank vs World Rank")
-st.plotly_chart(fig, use_container_width=True)
+fig = px.scatter(
+    filtered_df,
+    x="National Rank",
+    y="World Rank",
+    title="National Rank vs World Rank"
+)
 
-st.info("🌐 Insight: Strong national performance does not always equal top global performance, highlighting international competition.")
+# --- Style points ---
+fig.update_traces(
+    marker=dict(
+        color="#4C6EF5",
+        size=9,
+        opacity=0.75
+    ),
+    hovertemplate="<b>National Rank:</b> %{x}<br><b>World Rank:</b> %{y}<extra></extra>"
+)
+
+# --- Layout polish for dark theme ---
+fig.update_layout(
+    showlegend=False,
+    plot_bgcolor="#0E1117",
+    paper_bgcolor="#0E1117",
+    xaxis_title="National Rank",
+    yaxis_title="World Rank",
+    title_font=dict(size=18),
+    xaxis=dict(showgrid=False),
+    yaxis=dict(
+        autorange="reversed",  # better world rank = higher position
+        showgrid=True,
+        gridcolor="rgba(255,255,255,0.08)"
+    )
+)
+
+st.plotly_chart(fig, use_container_width=True)
+st.info(
+    "🌐 Insight: Strong national rankings do not consistently translate to elite global positions, "
+    "underscoring the impact of international research visibility and global reputation."
+)
+
 
 # -------------------------------
 # INSTITUTIONS TABLE WITH FILTERS & AUTO INSIGHTS
